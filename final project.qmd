@@ -1,0 +1,1745 @@
+---
+title: "final project"
+---
+
+```{r}
+# 安装基础包
+library(tidyverse)
+library(ggplot2)
+library(plotly)
+# 1. 加载需要的包
+library(tidyverse)
+
+# 2. 下载UFO数据
+# Copy the following code:
+
+# 1. Load required packages
+library(tidyverse)
+
+# 2. Download UFO data
+# This is a public UFO sighting dataset
+ufo_url <- "https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-06-25/ufo_sightings.csv"
+
+# 3. Read data
+ufo_data <- read_csv(ufo_url)
+
+# 4. View first few rows
+head(ufo_data)
+
+# 5. Check how many rows
+nrow(ufo_data)
+
+# 6. Check column names
+colnames(ufo_data)
+
+# Check data structure
+str(ufo_data)
+
+# View data summary
+summary(ufo_data)
+
+# Process date and time
+ufo_data <- ufo_data %>%
+  mutate(
+    # Convert date_time to proper format
+    date_time = as.POSIXct(date_time, format = "%m/%d/%Y %H:%M"),
+    # Extract year
+    year = year(date_time),
+    # Extract month
+    month = month(date_time),
+    # Extract hour
+    hour = hour(date_time)
+  )
+
+# Filter out missing geographic locations
+ufo_data <- ufo_data %>%
+  filter(!is.na(latitude), !is.na(longitude))
+
+# View processed data
+head(ufo_data)
+```
+
+```{r}
+# Count sightings by year
+yearly_counts <- ufo_data %>%
+  group_by(year) %>%
+  summarise(count = n()) %>%
+  filter(year >= 1990, year <= 2014)  # Select years with good data quality
+
+# Create line plot
+ggplot(yearly_counts, aes(x = year, y = count)) +
+  geom_line(color = "green", size = 2) +
+  geom_point(color = "green", size = 3) +
+  labs(
+    title = "UFO Sightings Annual Trend",
+    x = "Year",
+    y = "Number of Sightings"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+# Count by hour
+hourly_counts <- ufo_data %>%
+  group_by(hour) %>%
+  summarise(count = n())
+
+# Create bar chart
+ggplot(hourly_counts, aes(x = hour, y = count)) +
+  geom_bar(stat = "identity", fill = "darkgreen") +
+  labs(
+    title = "UFO Sightings Distribution in 24 Hours",
+    x = "Hour",
+    y = "Number of Sightings"
+  ) +
+  scale_x_continuous(breaks = 0:23) +
+  theme_minimal()
+```
+
+```{r}
+# Count most common UFO shapes
+shape_counts <- ufo_data %>%
+  filter(!is.na(ufo_shape)) %>%
+  count(ufo_shape) %>%
+  top_n(10, n) %>%
+  arrange(desc(n))
+
+# Create horizontal bar chart
+ggplot(shape_counts, aes(x = reorder(ufo_shape, n), y = n)) +
+  geom_bar(stat = "identity", fill = "purple") +
+  coord_flip() +  # Flip coordinates for horizontal bars
+  labs(
+    title = "Top 10 Most Common UFO Shapes",
+    x = "UFO Shape",
+    y = "Number of Sightings"
+  ) +
+  theme_minimal()
+
+
+```
+
+```{r}
+# Convert ggplot to interactive
+library(plotly)
+
+# Create interactive UFO shape chart
+p <- ggplot(shape_counts, aes(x = reorder(ufo_shape, n), y = n)) +
+  geom_bar(stat = "identity", fill = "purple") +
+  coord_flip() +
+  labs(
+    title = "Top 10 Most Common UFO Shapes",
+    x = "UFO Shape",
+    y = "Number of Sightings"
+  ) +
+  theme_minimal()
+
+# Convert to interactive
+ggplotly(p)
+```
+
+```{r}
+# Count by state (US data only)
+state_counts <- ufo_data %>%
+  filter(country == "us") %>%
+  group_by(state) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count)) %>%
+  top_n(20, count)  # Top 20 states only
+
+# Create bar chart
+ggplot(state_counts, aes(x = reorder(state, count), y = count)) +
+  geom_bar(stat = "identity", fill = "darkblue") +
+  coord_flip() +
+  labs(
+    title = "Top 20 States with Most UFO Sightings",
+    x = "State",
+    y = "Number of Sightings"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+library(maps)
+library(ggplot2)
+# Get US map data
+us_states <- map_data("state")
+
+# Prepare data: count sightings per state
+state_data_fixed <- ufo_data %>%
+  filter(country == "us", !is.na(state), state != "") %>%
+  mutate(
+    state_upper = toupper(state),
+    state_full = tolower(state.name[match(state_upper, state.abb)])
+  ) %>%
+  filter(!is.na(state_full)) %>%
+  group_by(state_full) %>%
+  summarise(sightings = n()) %>%
+  arrange(desc(sightings))
+us_states <- map_data("state")
+# Merge map data with UFO data
+map_data_final <- us_states %>%
+  left_join(state_data_fixed, by = c("region" = "state_full"))
+
+# Create map
+library(RColorBrewer)
+
+# 使用深色背景的神秘配色
+ggplot(map_data_final, aes(x = long, y = lat, group = group, fill = sightings)) +
+  geom_polygon(color = "black", size = 0.1) +
+  scale_fill_gradientn(
+    colors = c("#0a0e27", "#1e3c72", "#2a5298", "#7e57c2", "#b39ddb", "#ce93d8", "#f48fb1"),
+    na.value = "#0a0e27",
+    name = "UFO\nSightings",
+    breaks = c(500, 1000, 2000, 3000, 4000),
+    labels = scales::comma
+  ) +
+  labs(
+    title = "UFO Sightings Across the USA",
+    subtitle = "Where are the aliens visiting?"
+  ) +
+  theme_void() +
+  theme(
+    plot.background = element_rect(fill = "#000000"),
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5, color = "#00ff00"),
+    plot.subtitle = element_text(size = 14, hjust = 0.5, color = "#cccccc"),
+    legend.position = "right",
+    legend.title = element_text(size = 12, face = "bold", color = "white"),
+    legend.text = element_text(size = 10, color = "white"),
+    legend.background = element_rect(fill = "#000000")
+  )
+```
+
+```{r}
+# 加载必要的包
+library(tidyverse)
+library(randomForest)
+library(caret)
+library(lubridate)
+library(zoo)
+
+# 步骤1: 数据预处理
+prepare_ufo_data <- function(ufo_data) {
+  
+  # 基础清理
+  ufo_clean <- ufo_data %>%
+    # 转换日期时间
+    mutate(
+      datetime = as.POSIXct(date_time, format = "%m/%d/%Y %H:%M"),
+      # 清理州代码
+      state_clean = toupper(trimws(state)),
+      # 添加时间特征
+      weekday = wday(datetime, label = TRUE),
+      is_weekend = weekday %in% c("Sat", "Sun"),
+      is_night = hour >= 20 | hour <= 6,
+      day = day(datetime),
+      # 季节
+      season = case_when(
+        month %in% c(12, 1, 2) ~ "Winter",
+        month %in% c(3, 4, 5) ~ "Spring",
+        month %in% c(6, 7, 8) ~ "Summer",
+        month %in% c(9, 10, 11) ~ "Fall"
+      )
+    ) %>%
+    # 只保留美国数据
+    filter(
+      country == "us",
+      state_clean %in% state.abb,
+      !is.na(latitude),
+      !is.na(longitude),
+      year >= 1990  # 只使用1990年后的数据
+    )
+  
+  return(ufo_clean)
+}
+
+# 步骤2: 创建月度特征
+create_monthly_features <- function(ufo_clean) {
+  
+  # 按州和月份聚合
+  monthly_features <- ufo_clean %>%
+    mutate(
+      year_month = floor_date(datetime, "month")
+    ) %>%
+    group_by(state_clean, year_month) %>%
+    summarise(
+      # 基础统计
+      monthly_sightings = n(),
+      
+      # 时间模式
+      night_ratio = mean(is_night),
+      weekend_ratio = mean(is_weekend),
+      
+      # 地理分散度
+      unique_cities = n_distinct(city_area),
+      lat_spread = sd(latitude, na.rm = TRUE),
+      lon_spread = sd(longitude, na.rm = TRUE),
+      geographic_spread = sqrt(lat_spread^2 + lon_spread^2),
+      
+      # 描述质量
+      avg_description_length = mean(nchar(description), na.rm = TRUE),
+      
+      # 形状多样性
+      unique_shapes = n_distinct(ufo_shape[!is.na(ufo_shape)]),
+      
+      # 时间集中度
+      unique_days = n_distinct(day),
+      
+      .groups = "drop"
+    ) %>%
+    # 处理NA值
+    mutate(
+      geographic_spread = ifelse(is.na(geographic_spread), 0, geographic_spread),
+      lat_spread = ifelse(is.na(lat_spread), 0, lat_spread),
+      lon_spread = ifelse(is.na(lon_spread), 0, lon_spread)
+    )
+  
+  return(monthly_features)
+}
+
+# 步骤3: 添加历史特征和目标变量
+add_historical_features <- function(monthly_features) {
+  
+  # 添加历史趋势
+  features_with_history <- monthly_features %>%
+    arrange(state_clean, year_month) %>%
+    group_by(state_clean) %>%
+    mutate(
+      # 滞后特征
+      lag_1m = lag(monthly_sightings, 1),
+      lag_2m = lag(monthly_sightings, 2),
+      lag_3m = lag(monthly_sightings, 3),
+      
+      # 移动平均
+      ma_3m = zoo::rollmean(monthly_sightings, k = 3, fill = NA, align = "right"),
+      ma_6m = zoo::rollmean(monthly_sightings, k = 6, fill = NA, align = "right"),
+      
+      # 趋势
+      trend_3m = ifelse(!is.na(ma_3m), monthly_sightings - ma_3m, 0),
+      
+      # 增长率
+      growth_rate = ifelse(!is.na(lag_1m) & lag_1m > 0, 
+                          (monthly_sightings - lag_1m) / lag_1m, 
+                          0),
+      
+      # 目标变量：下个月的目击数
+      next_month_sightings = lead(monthly_sightings, 1),
+      
+      # 计算每个州的历史分位数
+      state_median = median(monthly_sightings, na.rm = TRUE),
+      state_75th = quantile(monthly_sightings, 0.75, na.rm = TRUE),
+      
+      # 定义热点：下个月超过历史75分位数
+      is_hotspot_next_month = !is.na(next_month_sightings) & 
+                              next_month_sightings > state_75th
+    ) %>%
+    ungroup()
+  
+  # 添加州级特征
+  state_features <- monthly_features %>%
+    group_by(state_clean) %>%
+    summarise(
+      total_historical = sum(monthly_sightings),
+      months_active = n(),
+      avg_monthly = mean(monthly_sightings),
+      max_monthly = max(monthly_sightings),
+      .groups = "drop"
+    )
+  
+  # 合并所有特征
+  final_features <- features_with_history %>%
+    left_join(state_features, by = "state_clean") %>%
+    # 添加时间特征
+    mutate(
+      year = year(year_month),
+      month = month(year_month),
+      season = case_when(
+        month %in% c(12, 1, 2) ~ "Winter",
+        month %in% c(3, 4, 5) ~ "Spring",
+        month %in% c(6, 7, 8) ~ "Summer",
+        month %in% c(9, 10, 11) ~ "Fall"
+      )
+    ) %>%
+    # 移除没有历史数据的记录
+    filter(!is.na(lag_1m), !is.na(is_hotspot_next_month))
+  
+  return(final_features)
+}
+```
+
+```{r}
+# 步骤4: 准备建模数据
+prepare_modeling_data <- function(features) {
+  
+  # 选择建模特征
+  model_data <- features %>%
+    select(
+      # 目标变量
+      is_hotspot_next_month,
+      
+      # 当前月特征
+      monthly_sightings,
+      night_ratio,
+      weekend_ratio,
+      unique_cities,
+      geographic_spread,
+      avg_description_length,
+      unique_shapes,
+      unique_days,
+      
+      # 历史特征
+      lag_1m, lag_2m, lag_3m,
+      ma_3m, trend_3m, growth_rate,
+      
+      # 州级特征
+      avg_monthly,
+      max_monthly,
+      
+      # 时间特征
+      year, month, season
+    ) %>%
+    # 转换数据类型
+    mutate(
+      is_hotspot_next_month = factor(is_hotspot_next_month, 
+                                     levels = c(FALSE, TRUE),
+                                     labels = c("Normal", "Hotspot")),
+      month = factor(month),
+      season = factor(season)
+    ) %>%
+    # 处理缺失值
+    mutate_if(is.numeric, ~ifelse(is.na(.), 0, .))
+  
+  return(model_data)
+}
+
+# 步骤5: 训练随机森林模型
+train_hotspot_model <- function(model_data) {
+  
+  set.seed(123)
+  
+  # 数据分割
+  train_index <- createDataPartition(model_data$is_hotspot_next_month, 
+                                    p = 0.8, 
+                                    list = FALSE)
+  
+  train_data <- model_data[train_index, ]
+  test_data <- model_data[-train_index, ]
+  
+  # 训练随机森林
+  rf_model <- randomForest(
+    is_hotspot_next_month ~ .,
+    data = train_data,
+    ntree = 500,
+    mtry = 5,
+    importance = TRUE,
+    na.action = na.omit
+  )
+  
+  # 预测测试集
+  test_pred <- predict(rf_model, test_data)
+  test_prob <- predict(rf_model, test_data, type = "prob")
+  
+  # 计算性能
+  conf_matrix <- confusionMatrix(test_pred, test_data$is_hotspot_next_month)
+  
+  # 特征重要性
+  importance_df <- data.frame(
+    feature = rownames(importance(rf_model)),
+    importance = importance(rf_model)[, "MeanDecreaseGini"]
+  ) %>%
+    arrange(desc(importance))
+  
+  # 返回结果
+  return(list(
+    model = rf_model,
+    train_data = train_data,
+    test_data = test_data,
+    performance = conf_matrix,
+    importance = importance_df,
+    predictions = data.frame(
+      actual = test_data$is_hotspot_next_month,
+      predicted = test_pred,
+      prob_hotspot = test_prob[, "Hotspot"]
+    )
+  ))
+}
+
+```
+
+```{r}
+# 步骤6: 预测下个月热点
+predict_next_month_hotspots <- function(model_result, all_features, top_n = 10) {
+  
+  # 获取最新月份的数据
+  latest_features <- all_features %>%
+    group_by(state_clean) %>%
+    filter(year_month == max(year_month)) %>%
+    ungroup()
+  
+  # 准备预测数据
+  prediction_data <- latest_features %>%
+    select(
+      # 标识
+      state_clean,
+      
+      # 当前月特征
+      monthly_sightings,
+      night_ratio,
+      weekend_ratio,
+      unique_cities,
+      geographic_spread,
+      avg_description_length,
+      unique_shapes,
+      unique_days,
+      
+      # 历史特征
+      lag_1m, lag_2m, lag_3m,
+      ma_3m, trend_3m, growth_rate,
+      
+      # 州级特征
+      avg_monthly,
+      max_monthly,
+      
+      # 时间特征
+      year, month, season
+    ) %>%
+    mutate(
+      month = factor(month, levels = levels(model_result$train_data$month)),
+      season = factor(season, levels = levels(model_result$train_data$season))
+    ) %>%
+    mutate_if(is.numeric, ~ifelse(is.na(.), 0, .))
+  
+  # 预测
+  pred_prob <- predict(model_result$model, prediction_data, type = "prob")
+  
+  # 创建结果表
+  results <- data.frame(
+    state = prediction_data$state_clean,
+    current_sightings = prediction_data$monthly_sightings,
+    hotspot_probability = pred_prob[, "Hotspot"],
+    trend = prediction_data$trend_3m,
+    growth_rate = prediction_data$growth_rate,
+    historical_avg = prediction_data$avg_monthly
+  ) %>%
+    mutate(
+      risk_level = case_when(
+        hotspot_probability > 0.8 ~ "🔴 Very High",
+        hotspot_probability > 0.6 ~ "🟠 High",
+        hotspot_probability > 0.4 ~ "🟡 Medium",
+        TRUE ~ "🟢 Low"
+      )
+    ) %>%
+    arrange(desc(hotspot_probability)) %>%
+    head(top_n)
+  
+  return(results)
+}
+```
+
+```{r}
+# 步骤7: 可视化预测结果
+visualize_hotspot_predictions <- function(predictions) {
+  
+  # 条形图
+  p1 <- ggplot(predictions, aes(x = reorder(state, hotspot_probability), 
+                                y = hotspot_probability)) +
+    geom_bar(stat = "identity", aes(fill = hotspot_probability)) +
+    geom_text(aes(label = sprintf("%.1f%%", hotspot_probability * 100)), 
+              hjust = -0.1, size = 3) +
+    coord_flip() +
+    scale_fill_gradient2(
+      low = "#27ae60",
+      mid = "#f39c12",
+      high = "#e74c3c",
+      midpoint = 0.5,
+      guide = "none"
+    ) +
+    scale_y_continuous(limits = c(0, 1), labels = scales::percent) +
+    labs(
+      title = "UFO Hotspot Predictions for Next Month",
+      subtitle = "Top 10 states most likely to experience increased UFO activity",
+      x = "State",
+      y = "Probability of Becoming a Hotspot"
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 14, face = "bold"),
+      plot.subtitle = element_text(size = 10, color = "gray50")
+    )
+  
+  return(p1)
+}
+
+# 步骤9: 执行完整的预测流程
+run_ufo_hotspot_prediction <- function(ufo_data) {
+  
+  cat("🛸 Starting UFO Hotspot Prediction Analysis...\n")
+  cat("════════════════════════════════════════════\n\n")
+  
+  # 1. 数据准备
+  cat("📊 Step 1: Preparing data...\n")
+  ufo_clean <- prepare_ufo_data(ufo_data)
+  cat(sprintf("   ✓ Cleaned data: %d records\n", nrow(ufo_clean)))
+  
+  # 2. 创建月度特征
+  cat("\n📈 Step 2: Creating monthly features...\n")
+  monthly_features <- create_monthly_features(ufo_clean)
+  cat(sprintf("   ✓ Monthly aggregates: %d records\n", nrow(monthly_features)))
+  
+  # 3. 添加历史特征
+  cat("\n🔄 Step 3: Adding historical features...\n")
+  all_features <- add_historical_features(monthly_features)
+  cat(sprintf("   ✓ Features with history: %d records\n", nrow(all_features)))
+  
+  # 4. 准备建模数据
+  cat("\n🎯 Step 4: Preparing modeling data...\n")
+  model_data <- prepare_modeling_data(all_features)
+  cat(sprintf("   ✓ Final dataset: %d records\n", nrow(model_data)))
+  
+  # 5. 训练模型
+  cat("\n🤖 Step 5: Training prediction model...\n")
+  model_result <- train_hotspot_model(model_data)
+  cat(sprintf("   ✓ Model accuracy: %.1f%%\n", 
+              model_result$performance$overall["Accuracy"] * 100))
+  
+  # 6. 生成预测
+  cat("\n🔮 Step 6: Generating predictions...\n")
+  predictions <- predict_next_month_hotspots(model_result, all_features, top_n = 10)
+  cat(sprintf("   ✓ Predictions generated for %d states\n", nrow(predictions)))
+  
+  # 7. 创建可视化
+  cat("\n📊 Step 7: Creating visualizations...\n")
+  plot <- visualize_hotspot_predictions(predictions)
+  
+  
+  # 返回所有结果
+  return(list(
+    model = model_result,
+    predictions = predictions,
+    plot = plot,
+    features = all_features
+  ))
+}
+
+# 执行分析
+results <- run_ufo_hotspot_prediction(ufo_data)
+
+# 显示图表
+print(results$plot)
+
+```
+
+```{r}
+# 步骤10: 创建综合仪表板
+create_comprehensive_dashboard <- function(results) {
+  library(gridExtra)
+  library(grid)
+  
+  # 1. 特征重要性图
+  importance_plot <- ggplot(results$model$importance %>% head(10), 
+                           aes(x = reorder(feature, importance), y = importance)) +
+    geom_bar(stat = "identity", fill = "#3498db") +
+    coord_flip() +
+    labs(
+      title = "Top 10 Most Important Features",
+      x = "Feature",
+      y = "Importance Score"
+    ) +
+    theme_minimal()
+  
+  # 2. 预测概率分布
+  prob_dist <- ggplot(results$predictions, 
+                      aes(x = hotspot_probability)) +
+    geom_histogram(bins = 20, fill = "#e74c3c", alpha = 0.7) +
+    labs(
+      title = "Distribution of Hotspot Probabilities",
+      x = "Probability",
+      y = "Count"
+    ) +
+    theme_minimal()
+  
+  # 3. 当前活动 vs 预测
+  activity_plot <- ggplot(results$predictions, 
+                         aes(x = current_sightings, y = hotspot_probability)) +
+    geom_point(size = 3, aes(color = risk_level)) +
+    geom_smooth(method = "lm", se = TRUE, alpha = 0.2) +
+    scale_color_manual(values = c("🔴 Very High" = "#e74c3c",
+                                  "🟠 High" = "#f39c12",
+                                  "🟡 Medium" = "#f1c40f",
+                                  "🟢 Low" = "#27ae60")) +
+    labs(
+      title = "Current Activity vs Prediction",
+      x = "Current Monthly Sightings",
+      y = "Hotspot Probability"
+    ) +
+    theme_minimal()
+  
+  # 组合图表
+  grid.arrange(
+    results$plot,
+    importance_plot,
+    prob_dist,
+    activity_plot,
+    ncol = 2,
+    top = textGrob("🛸 UFO Hotspot Prediction Dashboard", 
+                   gp = gpar(fontsize = 18, fontface = "bold"))
+  )
+}
+
+# 创建仪表板
+create_comprehensive_dashboard(results)
+
+```
+
+```{r}
+# 步骤11: 创建预测热力地图
+create_prediction_map <- function(results) {
+  
+  # 获取所有州的最新数据
+  all_states_latest <- results$features %>%
+    group_by(state_clean) %>%
+    filter(year_month == max(year_month)) %>%
+    ungroup()
+  
+  # 准备预测数据
+  all_states_pred <- prepare_modeling_data(all_states_latest) %>%
+    mutate(
+      month = factor(month, levels = levels(results$model$train_data$month)),
+      season = factor(season, levels = levels(results$model$train_data$season))
+    )
+  
+  # 预测所有州
+  all_predictions <- predict(results$model$model, all_states_pred, type = "prob")
+  
+  # 创建地图数据
+  map_data <- data.frame(
+    state = all_states_latest$state_clean,
+    probability = all_predictions[, "Hotspot"]
+  ) %>%
+    mutate(region = tolower(state.name[match(state, state.abb)]))
+  
+  # 获取美国地图数据
+  us_states <- map_data("state")
+  
+  # 合并数据
+  plot_data <- us_states %>%
+    left_join(map_data, by = "region")
+  
+  # 创建地图
+  map_plot <- ggplot(plot_data, aes(x = long, y = lat, group = group, fill = probability)) +
+    geom_polygon(color = "white", size = 0.1) +
+    scale_fill_gradient2(
+      low = "#2ecc71",
+      mid = "#f39c12",
+      high = "#e74c3c",
+      midpoint = 0.5,
+      na.value = "gray90",
+      limits = c(0, 1),
+      name = "Hotspot\nProbability"
+    ) +
+    labs(
+      title = "🗺️ UFO Hotspot Probability Map - Next Month Forecast",
+      subtitle = "Red areas indicate higher probability of increased UFO activity"
+    ) +
+    theme_void() +
+    theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray50"),
+      legend.position = "right"
+    ) +
+    # 添加高风险州的标签
+    geom_text(
+      data = plot_data %>%
+        group_by(state) %>%
+        summarise(
+          lat = mean(lat),
+          long = mean(long),
+          probability = first(probability)
+        ) %>%
+        filter(probability > 0.7, !is.na(probability)),
+      aes(x = long, y = lat, label = state, group = NULL),
+      size = 3,
+      fontface = "bold"
+    )
+  
+  return(map_plot)
+}
+
+# 创建地图
+map <- create_prediction_map(results)
+print(map)
+```
+
+```{r}
+# 步骤13: 创建简单的Shiny应用（可选）
+create_interactive_app <- function(results) {
+  library(shiny)
+  library(plotly)
+  
+  ui <- fluidPage(
+    titlePanel("🛸 UFO Hotspot Prediction System"),
+    
+    sidebarLayout(
+      sidebarPanel(
+        h3("Prediction Settings"),
+        sliderInput("prob_threshold", 
+                    "Probability Threshold:",
+                    min = 0, max = 1, value = 0.5, step = 0.1),
+        
+        selectInput("view_type",
+                   "Select View:",
+                   choices = c("Predictions", "Map", "Trends")),
+        
+        hr(),
+        
+        h4("Current Top Hotspot:"),
+        textOutput("top_hotspot"),
+        
+        hr(),
+        
+        downloadButton("download_report", "Download Report")
+      ),
+      
+      mainPanel(
+        plotlyOutput("main_plot", height = "600px"),
+        
+        hr(),
+        
+        DT::dataTableOutput("prediction_table")
+      )
+    )
+  )
+  
+  server <- function(input, output, session) {
+    
+    # 筛选预测结果
+    filtered_predictions <- reactive({
+      results$predictions %>%
+        filter(hotspot_probability >= input$prob_threshold)
+    })
+    
+    # 显示顶部热点
+    output$top_hotspot <- renderText({
+      top <- results$predictions[1, ]
+      sprintf("%s (%.1f%% probability)", 
+              top$state, 
+              top$hotspot_probability * 100)
+    })
+    
+    # 主图表
+    output$main_plot <- renderPlotly({
+      if (input$view_type == "Predictions") {
+        ggplotly(results$plot)
+      } else if (input$view_type == "Map") {
+        ggplotly(create_prediction_map(results))
+      } else {
+        # 趋势图
+        trend_plot <- ggplot(results$predictions, 
+                            aes(x = historical_avg, y = current_sightings,
+                                size = hotspot_probability,
+                                color = risk_level,
+                                text = paste("State:", state))) +
+          geom_point(alpha = 0.7) +
+          scale_size_continuous(range = c(3, 10)) +
+          labs(title = "Historical vs Current Activity",
+               x = "Historical Average",
+               y = "Current Month Sightings") +
+          theme_minimal()
+        
+        ggplotly(trend_plot, tooltip = "text")
+      }
+    })
+    
+    # 数据表
+    output$prediction_table <- DT::renderDataTable({
+      filtered_predictions() %>%
+        mutate(
+          hotspot_probability = sprintf("%.1f%%", hotspot_probability * 100),
+          growth_rate = sprintf("%+.1f%%", growth_rate * 100)
+        )
+    }, options = list(pageLength = 10))
+    
+    # 下载功能
+    output$download_report <- downloadHandler(
+      filename = function() {
+        paste0("ufo_predictions_", Sys.Date(), ".csv")
+      },
+      content = function(file) {
+        write.csv(results$predictions, file, row.names = FALSE)
+      }
+    )
+  }
+  
+  # 返回app对象
+  return(list(ui = ui, server = server))
+}
+
+# 创建app（如果需要运行）
+app <- create_interactive_app(results)
+shinyApp(app$ui, app$server)
+
+```
+
+```{r}
+# 创建实时UFO监控仪表板
+library(shiny)
+library(leaflet)
+library(plotly)
+
+create_realtime_ufo_dashboard <- function() {
+  
+  ui <- fluidPage(
+    titlePanel("🛸 Real-Time UFO Activity Monitor"),
+    
+    # 自动刷新
+    tags$head(
+      tags$script(HTML("
+        setInterval(function(){
+          Shiny.onInputChange('refresh', Math.random());
+        }, 30000); // 每30秒刷新
+      "))
+    ),
+    
+    fluidRow(
+      column(3,
+        wellPanel(
+          h4("🎛️ Control Panel"),
+          
+          actionButton("manual_refresh", "🔄 Refresh Now", 
+                      class = "btn-primary btn-block"),
+          
+          hr(),
+          
+          sliderInput("time_range", "Time Range (hours):",
+                     min = 1, max = 24, value = 6),
+          
+          sliderInput("cred_threshold", "Credibility Threshold:",
+                     min = 0, max = 100, value = 50),
+          
+          hr(),
+          
+          h4("📊 Current Stats"),
+          valueBoxOutput("total_reports"),
+          valueBoxOutput("high_cred_reports"),
+          valueBoxOutput("active_clusters")
+        )
+      ),
+      
+      column(9,
+        tabsetPanel(
+          tabPanel("🗺️ Live Map",
+                   leafletOutput("ufo_map", height = "500px")),
+          
+          tabPanel("📈 Activity Timeline",
+                   plotlyOutput("timeline", height = "500px")),
+          
+          tabPanel("🔥 Trending Locations",
+                   plotlyOutput("hotspots", height = "500px")),
+          
+          tabPanel("📝 Recent Reports",
+                   DT::dataTableOutput("recent_table"))
+        )
+      )
+    ),
+    
+    fluidRow(
+      column(12,
+        h4("🚨 Active Alerts"),
+        verbatimTextOutput("alerts")
+      )
+    )
+  )
+  
+  server <- function(input, output, session) {
+    
+    # 响应式数据
+    ufo_data <- reactive({
+      input$refresh  # 触发刷新
+      input$manual_refresh
+      
+      # 获取最新数据
+      recent <- search_ufo_tweets(n_tweets = 1000) %>%
+        filter(
+          created_at >= Sys.time() - hours(input$time_range),
+          credibility_score >= input$cred_threshold
+        )
+      
+      return(recent)
+    })
+    
+    # 聚类数据
+    clusters <- reactive({
+      detect_ufo_clusters(ufo_data(), 
+                         time_window = input$time_range * 60)
+    })
+    
+    # 统计框
+    output$high_cred_reports <- renderValueBox({
+      high_cred <- sum(ufo_data()$credibility_score >= 70)
+      valueBox(
+        value = high_cred,
+        subtitle = "High Credibility",
+        icon = icon("check-circle"),
+        color = if(high_cred > 5) "red" else "green"
+      )
+    })
+    
+    output$active_clusters <- renderValueBox({
+      n_clusters <- if(!is.null(clusters())) nrow(clusters()) else 0
+      valueBox(
+        value = n_clusters,
+        subtitle = "Active Clusters",
+        icon = icon("users"),
+        color = if(n_clusters > 0) "orange" else "gray"
+      )
+    })
+    
+    # 实时地图
+    output$ufo_map <- renderLeaflet({
+      leaflet() %>%
+        addProviderTiles(providers$CartoDB.DarkMatter) %>%
+        setView(lng = -98.5795, lat = 39.8283, zoom = 4)
+    })
+    
+    # 更新地图标记
+    observe({
+      data <- ufo_data()
+      
+      # 清理地图
+      leafletProxy("ufo_map") %>%
+        clearMarkers() %>%
+        clearMarkerClusters()
+      
+      # 添加有坐标的报告
+      if(any(!is.na(data$coordinates))) {
+        coords_data <- data %>%
+          filter(!is.na(coordinates)) %>%
+          separate(coordinates, c("lon", "lat"), sep = ",", convert = TRUE) %>%
+          mutate(
+            popup_text = paste(
+              "<b>Time:</b>", format(created_at, "%Y-%m-%d %H:%M"), "<br>",
+              "<b>User:</b>", screen_name, "<br>",
+              "<b>Credibility:</b>", credibility_score, "<br>",
+              "<b>Text:</b>", substr(text_clean, 1, 200)
+            )
+          )
+        
+        leafletProxy("ufo_map") %>%
+          addCircleMarkers(
+            data = coords_data,
+            lng = ~lon, lat = ~lat,
+            radius = ~sqrt(credibility_score) / 3,
+            color = ~ifelse(credibility_score >= 70, "red", "yellow"),
+            fillOpacity = 0.7,
+            popup = ~popup_text,
+            clusterOptions = markerClusterOptions()
+          )
+      }
+      
+      # 添加聚类热点
+      if(!is.null(clusters()) && nrow(clusters()) > 0) {
+        leafletProxy("ufo_map") %>%
+          addHeatmap(
+            data = clusters(),
+            lng = ~center_lon,
+            lat = ~center_lat,
+            intensity = ~n_reports,
+            radius = 20,
+            blur = 15
+          )
+      }
+    })
+    
+    # 时间线图表
+    output$timeline <- renderPlotly({
+      timeline_data <- ufo_data() %>%
+        mutate(
+          time_bin = floor_date(created_at, "30 minutes")
+        ) %>%
+        group_by(time_bin) %>%
+        summarise(
+          count = n(),
+          avg_credibility = mean(credibility_score),
+          .groups = "drop"
+        )
+      
+      p <- plot_ly(timeline_data, x = ~time_bin) %>%
+        add_trace(y = ~count, name = "Reports", type = "scatter", mode = "lines+markers",
+                  line = list(color = "#00ff00", width = 2)) %>%
+        add_trace(y = ~avg_credibility/10, name = "Avg Credibility/10", 
+                  type = "scatter", mode = "lines",
+                  line = list(color = "#ff0000", width = 2, dash = "dash"),
+                  yaxis = "y2") %>%
+        layout(
+          title = "UFO Activity Timeline",
+          xaxis = list(title = "Time"),
+          yaxis = list(title = "Number of Reports", side = "left"),
+          yaxis2 = list(title = "Credibility Score/10", overlaying = "y", side = "right"),
+          plot_bgcolor = "#1a1a1a",
+          paper_bgcolor = "#1a1a1a",
+          font = list(color = "white"),
+          hovermode = "x unified"
+        )
+      
+      p
+    })
+    
+    # 热点位置图表
+    output$hotspots <- renderPlotly({
+      location_data <- ufo_data() %>%
+        filter(!is.na(extracted_location)) %>%
+        group_by(extracted_location) %>%
+        summarise(
+          reports = n(),
+          avg_credibility = mean(credibility_score),
+          max_credibility = max(credibility_score),
+          .groups = "drop"
+        ) %>%
+        arrange(desc(reports)) %>%
+        head(20)
+      
+      plot_ly(location_data, 
+              x = ~reorder(extracted_location, reports), 
+              y = ~reports,
+              type = "bar",
+              marker = list(
+                color = ~avg_credibility,
+                colorscale = "Viridis",
+                showscale = TRUE,
+                colorbar = list(title = "Avg Credibility")
+              ),
+              text = ~paste("Max Credibility:", max_credibility),
+              hovertemplate = "%{x}<br>Reports: %{y}<br>%{text}<extra></extra>") %>%
+        layout(
+          title = "Top UFO Hotspots (Last 24h)",
+          xaxis = list(title = "Location"),
+          yaxis = list(title = "Number of Reports"),
+          plot_bgcolor = "#f0f0f0"
+        )
+    })
+    
+    # 最近报告表格
+    output$recent_table <- DT::renderDataTable({
+      ufo_data() %>%
+        arrange(desc(created_at)) %>%
+        select(
+          Time = created_at,
+          User = screen_name,
+          Location = extracted_location,
+          Credibility = credibility_score,
+          Text = text_clean
+        ) %>%
+        mutate(
+          Time = format(Time, "%m-%d %H:%M"),
+          Text = substr(Text, 1, 100)
+        )
+    }, options = list(
+      pageLength = 10,
+      order = list(0, 'desc'),
+      dom = 'ftip'
+    ))
+    
+    # 警报系统
+    output$alerts <- renderPrint({
+      # 检查高可信度聚类
+      if(!is.null(clusters()) && nrow(clusters()) > 0) {
+        high_activity <- clusters() %>%
+          filter(n_reports >= 5)
+        
+        if(nrow(high_activity) > 0) {
+          cat("🚨 HIGH ACTIVITY ALERTS:\n")
+          for(i in 1:nrow(high_activity)) {
+            cat(sprintf("\n📍 Location: %.4f, %.4f\n", 
+                       high_activity$center_lat[i], 
+                       high_activity$center_lon[i]))
+            cat(sprintf("   Reports: %d in %.0f minutes\n", 
+                       high_activity$n_reports[i],
+                       as.numeric(high_activity$time_span[i])))
+          }
+        }
+      }
+      
+      # 检查异常可信度报告
+      high_cred <- ufo_data() %>%
+        filter(credibility_score >= 90) %>%
+        arrange(desc(created_at)) %>%
+        head(5)
+      
+      if(nrow(high_cred) > 0) {
+        cat("\n\n⚡ HIGH CREDIBILITY REPORTS:\n")
+        for(i in 1:nrow(high_cred)) {
+          cat(sprintf("\n• %s (Score: %d)\n  %s\n  📍 %s\n", 
+                     format(high_cred$created_at[i], "%H:%M"),
+                     high_cred$credibility_score[i],
+                     substr(high_cred$text_clean[i], 1, 80),
+                     high_cred$extracted_location[i]))
+        }
+      }
+    })
+  }
+  
+  shinyApp(ui = ui, server = server)
+}
+
+```
+
+```{r}
+# UFO报告的NLP分析
+analyze_ufo_descriptions <- function(tweets) {
+  library(tidytext)
+  library(textdata)
+  
+  # 提取UFO描述关键词
+  ufo_keywords <- tweets %>%
+    unnest_tokens(word, text_clean) %>%
+    anti_join(stop_words) %>%
+    filter(!word %in% c("ufo", "saw", "just", "like", "see")) %>%
+    count(word, sort = TRUE)
+  
+  # 形状分类
+  shape_words <- list(
+    circular = c("round", "circle", "sphere", "ball", "orb", "disc"),
+    triangular = c("triangle", "triangular", "pyramid", "delta"),
+    cylindrical = c("cigar", "cylinder", "tube", "rod"),
+    lights = c("lights", "light", "bright", "glowing", "flash")
+  )
+  
+  # 运动模式分类
+  movement_words <- list(
+    stationary = c("hovering", "stationary", "still", "floating"),
+    linear = c("straight", "across", "flew", "moving"),
+    erratic = c("zigzag", "darting", "jumping", "erratic"),
+    fast = c("fast", "quick", "speed", "rapid", "zoom")
+  )
+  
+  # 分类每条推文
+  classified_tweets <- tweets %>%
+    mutate(
+      shape_type = classify_by_keywords(text_clean, shape_words),
+      movement_type = classify_by_keywords(text_clean, movement_words),
+      
+      # 情感分析
+      sentiment = analyze_sentiment(text_clean)
+    )
+  
+  return(classified_tweets)
+}
+
+# 关键词分类函数
+classify_by_keywords <- function(text, keyword_list) {
+  text_lower <- tolower(text)
+  
+  categories <- names(keyword_list)
+  scores <- numeric(length(categories))
+  
+  for(i in seq_along(categories)) {
+    keywords <- keyword_list[[categories[i]]]
+    scores[i] <- sum(str_detect(text_lower, keywords))
+  }
+  
+  if(max(scores) > 0) {
+    return(categories[which.max(scores)])
+  } else {
+    return("unknown")
+  }
+}
+
+```
+
+```{r}
+# 创建UFO社交媒体数据库
+create_ufo_social_database <- function() {
+  library(DBI)
+  library(RSQLite)
+  
+  # 创建数据库连接
+  con <- dbConnect(SQLite(), "ufo_social_monitor.db")
+  
+  # 创建表结构
+  dbExecute(con, "
+    CREATE TABLE IF NOT EXISTS social_reports (
+      id TEXT PRIMARY KEY,
+      created_at TIMESTAMP,
+      platform TEXT,
+      user_id TEXT,
+      user_name TEXT,
+      text TEXT,
+      location TEXT,
+      latitude REAL,
+      longitude REAL,
+      credibility_score INTEGER,
+      shape_type TEXT,
+      movement_type TEXT,
+      cluster_id INTEGER,
+      processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  ")
+  
+  dbExecute(con, "
+    CREATE TABLE IF NOT EXISTS ufo_clusters (
+      cluster_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      detected_at TIMESTAMP,
+      center_lat REAL,
+      center_lon REAL,
+      n_reports INTEGER,
+      time_span_minutes REAL,
+      max_credibility INTEGER,
+      status TEXT
+    )
+  ")
+  
+  dbExecute(con, "
+    CREATE TABLE IF NOT EXISTS alerts_log (
+      alert_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      alert_time TIMESTAMP,
+      alert_type TEXT,
+      location TEXT,
+      details TEXT,
+      resolved BOOLEAN DEFAULT FALSE
+    )
+  ")
+  
+  return(con)
+}
+
+# 保存新报告到数据库
+save_reports_to_db <- function(reports, con) {
+  dbWriteTable(con, "social_reports", reports, append = TRUE)
+}
+
+# 查询历史模式
+query_historical_patterns <- function(con, days_back = 30) {
+  
+  # 时间模式
+  time_pattern <- dbGetQuery(con, sprintf("
+    SELECT 
+      strftime('%%H', created_at) as hour,
+      COUNT(*) as count,
+      AVG(credibility_score) as avg_credibility
+    FROM social_reports
+    WHERE created_at >= datetime('now', '-%d days')
+    GROUP BY hour
+    ORDER BY hour
+  ", days_back))
+  
+  # 地理模式
+  location_pattern <- dbGetQuery(con, sprintf("
+    SELECT 
+      location,
+      COUNT(*) as total_reports,
+      AVG(credibility_score) as avg_credibility,
+      MAX(credibility_score) as max_credibility
+    FROM social_reports
+    WHERE created_at >= datetime('now', '-%d days')
+      AND location IS NOT NULL
+    GROUP BY location
+    ORDER BY total_reports DESC
+    LIMIT 20
+  ", days_back))
+  
+  return(list(time = time_pattern, location = location_pattern))
+}
+
+```
+
+```{r}
+# 创建完整的UFO社交媒体监控系统
+launch_ufo_social_monitor <- function() {
+  
+  # 初始化组件
+  db_con <- create_ufo_social_database()
+  alert_log <- character()
+  
+  # 主监控循环
+  monitor_loop <- function() {
+    while(TRUE) {
+      tryCatch({
+        # 1. 获取最新社交媒体数据
+        cat("\n🔍 Fetching latest UFO reports...\n")
+        new_reports <- search_ufo_tweets(n_tweets = 500)
+        
+        # 2. NLP分析
+        analyzed_reports <- analyze_ufo_descriptions(new_reports)
+        
+        # 3. 检测聚类
+        clusters <- detect_ufo_clusters(analyzed_reports)
+        
+        # 4. 保存到数据库
+        save_reports_to_db(analyzed_reports, db_con)
+        
+        # 5. 检查警报条件
+        if(!is.null(clusters) && any(clusters$n_reports >= 5)) {
+          alert_msg <- generate_alert_message(clusters)
+          alert_log <<- c(alert_log, alert_msg)
+          
+          # 发送通知
+          send_notifications(alert_msg)
+        }
+        
+        # 6. 更新统计
+        stats <- calculate_current_stats(analyzed_reports)
+        cat("\n📊 Current Stats:\n")
+        cat(sprintf("  Total reports: %d\n", stats$total))
+        cat(sprintf("  High credibility: %d\n", stats$high_cred))
+        cat(sprintf("  Active clusters: %d\n", stats$clusters))
+        
+        # 7. 等待下一轮
+        cat("\n⏰ Next check in 5 minutes...\n")
+        Sys.sleep(300)  # 5分钟
+        
+      }, error = function(e) {
+        cat("\n❌ Error:", e$message, "\n")
+        Sys.sleep(60)  # 错误后等待1分钟
+      })
+    }
+  }
+  # 启动监控
+  cat("\n")
+  cat("╔════════════════════════════════════════════════╗\n")
+  cat("║     🛸 UFO SOCIAL MEDIA MONITOR SYSTEM 🛸      ║\n")
+  cat("║          Real-time UFO Report Tracking         ║\n")
+  cat("╚════════════════════════════════════════════════╝\n")
+  cat("\n")
+  cat("System initialized at:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
+  cat("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+  
+  # 返回控制函数
+  list(
+    start = monitor_loop,
+    db = db_con,
+    logs = function() alert_log,
+    dashboard = function() create_realtime_ufo_dashboard()
+  )
+}
+
+# 辅助函数：生成警报消息
+generate_alert_message <- function(clusters) {
+  high_activity <- clusters %>%
+    filter(n_reports >= 5) %>%
+    arrange(desc(n_reports))
+  
+  msg <- paste0(
+    "\n🚨 UFO ACTIVITY ALERT 🚨\n",
+    "Time: ", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n",
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+  )
+  
+  for(i in 1:nrow(high_activity)) {
+    msg <- paste0(msg, sprintf(
+      "\n📍 Cluster #%d:\n",
+      "   Location: %.4f, %.4f\n",
+      "   Reports: %d in %.0f minutes\n",
+      "   Status: %s\n",
+      i,
+      high_activity$center_lat[i],
+      high_activity$center_lon[i],
+      high_activity$n_reports[i],
+      as.numeric(high_activity$time_span[i]),
+      if(high_activity$n_reports[i] >= 10) "🔴 CRITICAL" else "🟠 HIGH"
+    ))
+  }
+  
+  return(msg)
+}
+
+# 发送通知（可扩展）
+send_notifications <- function(alert_msg) {
+  # 控制台输出
+  cat(alert_msg)
+  
+  # 写入日志文件
+  write(alert_msg, file = "ufo_alerts.log", append = TRUE)
+  
+  # 可以添加：
+  # - 发送邮件
+  # - 推送到Slack/Discord
+  # - 发送短信
+  # - 更新网页仪表板
+}
+
+# 计算当前统计
+calculate_current_stats <- function(reports) {
+  list(
+    total = nrow(reports),
+    high_cred = sum(reports$credibility_score >= 70),
+    clusters = length(unique(reports$cluster_id[reports$cluster_id > 0])),
+    avg_credibility = mean(reports$credibility_score),
+    top_location = names(sort(table(reports$extracted_location), decreasing = TRUE))[1]
+  )
+}
+
+
+```
+
+
+```{r}
+# 第一步：安装必要的包
+
+
+# 第二步：创建并运行简化版仪表板
+library(shiny)
+library(shinydashboard)
+library(leaflet)
+library(plotly)
+
+# 创建一个模拟数据生成器（用于演示）
+generate_demo_ufo_data <- function(n = 100) {
+  # 生成模拟的UFO报告数据
+  data.frame(
+    id = 1:n,
+    created_at = Sys.time() - runif(n, 0, 86400), # 过去24小时内
+    text = sample(c(
+      "Just saw a strange light in the sky! #UFO",
+      "Three bright objects moving in formation #UFOSighting",
+      "Witnessed something unexplainable tonight #UAP",
+      "Strange craft hovering over the city #Aliens"
+    ), n, replace = TRUE),
+    user = paste0("user_", sample(1:50, n, replace = TRUE)),
+    latitude = runif(n, 25, 49),  # 美国纬度范围
+    longitude = runif(n, -125, -66),  # 美国经度范围
+    credibility_score = sample(30:95, n, replace = TRUE),
+    location = sample(state.name, n, replace = TRUE)
+  )
+}
+
+# 创建演示版仪表板
+ui <- dashboardPage(
+  dashboardHeader(title = "🛸 UFO Monitor Demo"),
+  
+  dashboardSidebar(
+    sidebarMenu(
+      menuItem("Dashboard", tabName = "dashboard", icon = icon("dashboard")),
+      menuItem("Map View", tabName = "map", icon = icon("map")),
+      menuItem("Reports", tabName = "reports", icon = icon("list"))
+    ),
+    
+    hr(),
+    
+    # 控制面板
+    h4("Control Panel", style = "padding-left: 15px;"),
+    
+    actionButton("refresh", "🔄 Refresh Data", 
+                 style = "margin: 10px;"),
+    
+    sliderInput("n_reports", "Number of Reports:",
+                min = 10, max = 200, value = 50)
+  ),
+  
+  dashboardBody(
+    tags$head(
+      tags$style(HTML("
+        .content-wrapper, .right-side {
+          background-color: #1a1a1a;
+        }
+        .box {
+          background: #2a2a2a;
+          color: white;
+        }
+        .box-header {
+          background: #333;
+          color: white;
+        }
+      "))
+    ),
+    
+    tabItems(
+      # 主仪表板
+      tabItem(tabName = "dashboard",
+        fluidRow(
+          valueBox(
+            value = textOutput("total_reports"),
+            subtitle = "Total Reports (24h)",
+            icon = icon("eye"),
+            color = "blue"
+          ),
+          
+          valueBox(
+            value = textOutput("high_cred"),
+            subtitle = "High Credibility",
+            icon = icon("check-circle"),
+            color = "green"
+          ),
+          
+          valueBox(
+            value = textOutput("active_states"),
+            subtitle = "Active States",
+            icon = icon("map-marker"),
+            color = "yellow"
+          )
+        ),
+        
+        fluidRow(
+          box(
+            title = "UFO Activity Timeline",
+            status = "primary",
+            solidHeader = TRUE,
+            plotlyOutput("timeline", height = "300px"),
+            width = 12
+          )
+        ),
+        
+        fluidRow(
+          box(
+            title = "Top Locations",
+            status = "success",
+            solidHeader = TRUE,
+            plotlyOutput("locations", height = "300px"),
+            width = 6
+          ),
+          
+          box(
+            title = "Credibility Distribution",
+            status = "warning",
+            solidHeader = TRUE,
+            plotlyOutput("credibility", height = "300px"),
+            width = 6
+          )
+        )
+      ),
+      
+      # 地图视图
+      tabItem(tabName = "map",
+        box(
+          title = "Real-time UFO Sightings Map",
+          status = "primary",
+          solidHeader = TRUE,
+          leafletOutput("ufo_map", height = "600px"),
+          width = 12
+        )
+      ),
+      
+      # 报告列表
+      tabItem(tabName = "reports",
+        box(
+          title = "Recent UFO Reports",
+          status = "info",
+          solidHeader = TRUE,
+          DT::dataTableOutput("reports_table"),
+          width = 12
+        )
+      )
+    )
+  )
+)
+
+server <- function(input, output, session) {
+  
+  # 响应式数据
+  ufo_data <- reactive({
+    input$refresh  # 触发刷新
+    generate_demo_ufo_data(input$n_reports)
+  })
+  
+  # 统计值
+  output$total_reports <- renderText({
+    nrow(ufo_data())
+  })
+  
+  output$high_cred <- renderText({
+    sum(ufo_data()$credibility_score >= 70)
+  })
+  
+  output$active_states <- renderText({
+    length(unique(ufo_data()$location))
+  })
+  
+  # 时间线图
+  output$timeline <- renderPlotly({
+    timeline_data <- ufo_data() %>%
+      mutate(hour = hour(created_at)) %>%
+      group_by(hour) %>%
+      summarise(count = n(), .groups = "drop")
+    
+    plot_ly(timeline_data, x = ~hour, y = ~count, type = "scatter", mode = "lines+markers",
+            line = list(color = "#00ff00", width = 3),
+            marker = list(color = "#00ff00", size = 8)) %>%
+      layout(
+        title = "24-Hour Activity Pattern",
+        xaxis = list(title = "Hour", gridcolor = "#444"),
+        yaxis = list(title = "Reports", gridcolor = "#444"),
+        plot_bgcolor = "#1a1a1a",
+        paper_bgcolor = "#2a2a2a",
+        font = list(color = "white")
+      )
+  })
+  
+  # 位置图
+  output$locations <- renderPlotly({
+    location_data <- ufo_data() %>%
+      group_by(location) %>%
+      summarise(count = n(), .groups = "drop") %>%
+      top_n(10, count)
+    
+    plot_ly(location_data, x = ~count, y = ~reorder(location, count), 
+            type = "bar", orientation = "h",
+            marker = list(color = "#3498db")) %>%
+      layout(
+        xaxis = list(title = "Number of Reports"),
+        yaxis = list(title = ""),
+        plot_bgcolor = "#2a2a2a",
+        paper_bgcolor = "#2a2a2a",
+        font = list(color = "white")
+      )
+  })
+  
+  # 可信度分布
+  output$credibility <- renderPlotly({
+    plot_ly(ufo_data(), x = ~credibility_score, type = "histogram",
+            marker = list(color = "#e74c3c")) %>%
+      layout(
+        xaxis = list(title = "Credibility Score"),
+        yaxis = list(title = "Count"),
+        plot_bgcolor = "#2a2a2a",
+        paper_bgcolor = "#2a2a2a",
+        font = list(color = "white")
+      )
+  })
+  
+  # 地图
+  output$ufo_map <- renderLeaflet({
+    leaflet(ufo_data()) %>%
+      addProviderTiles(providers$CartoDB.DarkMatter) %>%
+      addCircleMarkers(
+        lng = ~longitude,
+        lat = ~latitude,
+        radius = ~sqrt(credibility_score) / 3,
+        color = ~ifelse(credibility_score >= 70, "#ff0000", "#ffff00"),
+        fillOpacity = 0.7,
+        popup = ~paste(
+          "<b>Report:</b><br>",
+          text, "<br>",
+          "<b>Credibility:</b>", credibility_score, "<br>",
+          "<b>Location:</b>", location
+        )
+      ) %>%
+      addHeatmap(
+        lng = ~longitude,
+        lat = ~latitude,
+        intensity = ~credibility_score / 100,
+        radius = 20,
+        blur = 15
+      )
+  })
+  
+  # 报告表格
+  output$reports_table <- DT::renderDataTable({
+    ufo_data() %>%
+      arrange(desc(created_at)) %>%
+      select(
+        Time = created_at,
+        Location = location,
+        Report = text,
+        Credibility = credibility_score
+      ) %>%
+      mutate(
+        Time = format(Time, "%Y-%m-%d %H:%M"),
+        Credibility = paste0(Credibility, "%")
+      )
+  }, options = list(pageLength = 10))
+}
+
+# 运行应用
+shinyApp(ui = ui, server = server)
+
+
+```
